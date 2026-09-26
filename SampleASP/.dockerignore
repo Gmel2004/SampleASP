@@ -1,0 +1,10 @@
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/.git
+**/.gitignore
+**/*.md
+**/node_modules
+**/.DS_Store
+**/Thumbs.db
