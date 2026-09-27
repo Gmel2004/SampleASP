@@ -3,7 +3,7 @@
   "error_code": "",
   "error_message": "",
   "elements_count": 237,
-  "emails_count": 4,
+  "emails_count": 5,
   "url": "https://test.com/page1",
   "decrypted_plain_text": "AES Error: Object reference not set to an instance of an object.",
   "elements_attr_list": [
@@ -249,6 +249,7 @@
     "webmaster@rbc.ru",
     "privet@test.com",
     "hh_test_task@gmail.com",
+    "letters@rbc.ru",
     "letters@rbc.ru"
   ]
 }

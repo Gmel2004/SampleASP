@@ -1,0 +1,16 @@
+namespace SampleASP.Models;
+
+public enum ErrorCode
+{
+    REQUEST_NULL,
+    SELECTOR_EMPTY,
+    ATTRIBUTE_EMPTY,
+    URL_B64_EMPTY,
+    PAGE_B64_EMPTY,
+    ENCRYPTED_TEXT_EMPTY,
+    KEY_EMPTY,
+    URL_DECODE_ERROR,
+    PAGE_DECODE_ERROR,
+    DECRYPTION_ERROR,
+    GENERAL_ERROR
+}

@@ -1,14 +1,43 @@
+using System.Text.Json.Serialization;
+
 namespace SampleASP.Models;
 
 public class ApiResponse
 {
-    public int Is_error { get; set; }
-    public string Error_code { get; set; } = string.Empty;
-    public string Error_message { get; set; } = string.Empty;
-    public int Elements_count { get; set; }
-    public int Emails_count { get; set; }
+    [JsonPropertyName("is_error")]
+    public int IsError { get; set; }
+    
+    [JsonPropertyName("error_code")]
+    public string ErrorCode { get; set; } = string.Empty;
+    
+    [JsonPropertyName("error_message")]
+    public string ErrorMessage { get; set; } = string.Empty;
+    
+    [JsonPropertyName("elements_count")]
+    public int ElementsCount { get; set; }
+    
+    [JsonPropertyName("emails_count")]
+    public int EmailsCount { get; set; }
+    
+    [JsonPropertyName("url")]
     public string Url { get; set; } = string.Empty;
-    public string Decrypted_plain_text { get; set; } = string.Empty;
-    public List<string> Elements_attr_list { get; set; } = new();
-    public List<string> Emails_list { get; set; } = new();
+    
+    [JsonPropertyName("decrypted_plain_text")]
+    public string DecryptedPlainText { get; set; } = string.Empty;
+    
+    [JsonPropertyName("elements_attr_list")]
+    public List<string> ElementsAttrList { get; set; } = new();
+    
+    [JsonPropertyName("emails_list")]
+    public List<string> EmailsList { get; set; } = new();
+
+    public static ApiResponse Error(ErrorCode errorCode, string errorMessage)
+    {
+        return new ApiResponse
+        {
+            IsError = 1,
+            ErrorCode = errorCode.ToString(),
+            ErrorMessage = errorMessage
+        };
+    }
 }

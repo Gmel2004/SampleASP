@@ -2,7 +2,6 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using SampleASP.Models;
 using SampleASP.Services;
-using System.Text.Json;
 
 namespace SampleASP.Controllers;
 
@@ -30,44 +29,24 @@ public class ApiController : ControllerBase
     {
         if (request is null)
         {
-            var nullResponse = new ApiResponse
-            {
-                Is_error = 1,
-                Error_code = "REQUEST_NULL",
-                Error_message = "Request body cannot be null or empty"
-            };
-            return Content(SerializeWithIndentation(nullResponse), "application/json");
+            return Ok(ApiResponse.Error(ErrorCode.REQUEST_NULL, "Request body cannot be null or empty"));
         }
 
-        var validationResult = await _validator.ValidateAsync(request, cancellationToken);
+        var validationResult = _validator.Validate(request);
 
         if (!validationResult.IsValid)
         {
             var firstError = validationResult.Errors.First();
-            var errorResponse = new ApiResponse
+            return Ok(new ApiResponse
             {
-                Is_error = 1,
-                Error_code = firstError.ErrorCode,
-                Error_message = firstError.ErrorMessage
-            };
-
-            return Content(SerializeWithIndentation(errorResponse), "application/json");
+                IsError = 1,
+                ErrorCode = firstError.ErrorCode,
+                ErrorMessage = firstError.ErrorMessage
+            });
         }
 
         var response = await _processingService.ProcessRequestAsync(request, cancellationToken);
 
-        return Content(SerializeWithIndentation(response), "application/json");
-    }
-
-    private static string SerializeWithIndentation(ApiResponse response)
-    {
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        };
-
-        return JsonSerializer.Serialize(response, options);
+        return Ok(response);
     }
 }

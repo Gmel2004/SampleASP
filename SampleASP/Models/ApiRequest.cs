@@ -1,11 +1,24 @@
+using System.Text.Json.Serialization;
+
 namespace SampleASP.Models;
 
 public class ApiRequest
 {
+    [JsonPropertyName("selector")]
     public string Selector { get; set; } = string.Empty;
+    
+    [JsonPropertyName("attribute")]
     public string Attribute { get; set; } = string.Empty;
-    public string Url_b64 { get; set; } = string.Empty;
-    public string Encrypted_text_bytes_b64 { get; set; } = string.Empty;
-    public string Key_bytes_b64 { get; set; } = string.Empty;
-    public string Page_b64 { get; set; } = string.Empty;
+    
+    [JsonPropertyName("url_b64")]
+    public string UrlB64 { get; set; } = string.Empty;
+    
+    [JsonPropertyName("encrypted_text_bytes_b64")]
+    public string EncryptedTextBytesB64 { get; set; } = string.Empty;
+    
+    [JsonPropertyName("key_bytes_b64")]
+    public string KeyBytesB64 { get; set; } = string.Empty;
+    
+    [JsonPropertyName("page_b64")]
+    public string PageB64 { get; set; } = string.Empty;
 }

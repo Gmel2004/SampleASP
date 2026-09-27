@@ -26,145 +26,135 @@ public partial class ProcessingService
         ApiRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = new ApiResponse();
-
         try
         {
-            var url = DecodeUrlFromBase64(request.Url_b64, response);
-            if (response.Is_error == 1) return response;
+            if (!TryDecodeBase64ToString(request.UrlB64, out var url))
+                return ApiResponse.Error(ErrorCode.URL_DECODE_ERROR, "Error decoding URL from base64");
 
-            string? pageHtml;
-            try
+            if (!TryDecodeBase64ToString(request.PageB64, out var pageHtml))
+                return ApiResponse.Error(ErrorCode.PAGE_DECODE_ERROR, "Error decoding page from base64");
+
+            var elements = await ParseHtmlAndExtractElements(pageHtml, request.Selector, request.Attribute, cancellationToken);
+            
+            await SaveElementsToDatabase(elements, cancellationToken);
+            
+            var emails = ExtractEmails(pageHtml);
+
+            if (!TryDecryptText(request.EncryptedTextBytesB64, request.KeyBytesB64, out var decryptedText))
+                return ApiResponse.Error(ErrorCode.DECRYPTION_ERROR, "Error decrypting text");
+
+            return new ApiResponse
             {
-                pageHtml = DecodeBase64ToString(request.Page_b64);
-            }
-            catch (Exception)
-            {
-                return CreateErrorResponse("PAGE_DECODE_ERROR", "Error decoding page from base64");
-            }
-
-            var elementsList =
-                await ParseHtmlWithAngleSharp(pageHtml, request.Selector, request.Attribute, cancellationToken);
-            response.Elements_count = elementsList.Count;
-            response.Elements_attr_list = elementsList.Select(t => t.AttributeValue).ToList();
-
-            await SaveElementsToDatabase(elementsList, cancellationToken);
-
-            var emails = EmailRegex().
-                Matches(pageHtml).
-                Select(m => m.Value).
-                Distinct().
-                ToList();
-
-            response.Emails_count = emails.Count;
-            response.Emails_list = emails;
-
-            var decryptedText = DecryptTextWithAes256(request.Encrypted_text_bytes_b64, request.Key_bytes_b64);
-            if (decryptedText == null) return CreateErrorResponse("DECRYPTION_ERROR", "Error decrypting text");
-            response.Decrypted_plain_text = decryptedText;
-
-            response.Is_error = 0;
+                IsError = 0,
+                Url = url,
+                ElementsCount = elements.Count,
+                ElementsAttrList = elements.Select(e => e.AttributeValue).ToList(),
+                EmailsCount = emails.Count,
+                EmailsList = emails,
+                DecryptedPlainText = decryptedText
+            };
         }
-        catch (Exception ex)
+        catch
         {
-            return CreateErrorResponse("GENERAL_ERROR", ex.Message);
-        }
-
-        return response;
-    }
-
-    private string DecodeUrlFromBase64(string urlBase64, ApiResponse response)
-    {
-        try
-        {
-            var url = DecodeBase64ToString(urlBase64);
-            response.Url = url;
-            return url;
-        }
-        catch (Exception)
-        {
-            response.Is_error = 1;
-            response.Error_code = "URL_DECODE_ERROR";
-            response.Error_message = "Error decoding URL from base64";
-            return string.Empty;
+            // —пециально неподробна€ ошибка - чтобы не вышли лишние детали дл€ пользовател€
+            // дл€ разработчиков и насто€щего production кода надо добавить логирование
+            return ApiResponse.Error(ErrorCode.GENERAL_ERROR, "An unexpected error occurred");
         }
     }
 
-    private async Task<List<(string AttributeValue, string Html)>>
-        ParseHtmlWithAngleSharp(string pageHtml, string selector, string attribute, CancellationToken cancellationToken)
+    private async Task<List<HtmlElement>> ParseHtmlAndExtractElements(
+        string pageHtml, 
+        string selector, 
+        string attribute, 
+        CancellationToken cancellationToken)
     {
         var config = Configuration.Default;
         var context = BrowsingContext.New(config);
         var document = await context.OpenAsync(req => req.Content(pageHtml), cancellationToken);
-        var elements = document.
-            QuerySelectorAll(selector).
-            Select(t => (AttributeValue: t.GetAttribute(attribute), Html: t.OuterHtml)).
-            Where(t => !string.IsNullOrEmpty(t.AttributeValue)).
-            ToList();
-
-        return elements ?? [];
+        
+        return document
+            .QuerySelectorAll(selector)
+            .Select(element => new HtmlElement(
+                element.GetAttribute(attribute) ?? string.Empty,
+                element.OuterHtml))
+            .Where(e => !string.IsNullOrEmpty(e.AttributeValue))
+            .ToList();
     }
 
-    private string? DecryptTextWithAes256(string encryptedTextBase64, string keyBase64)
+    private List<string> ExtractEmails(string pageHtml)
     {
+        return EmailRegex()
+            .Matches(pageHtml)
+            .Select(m => m.Value)
+            .ToList();
+    }
+
+    private bool TryDecryptText(string encryptedTextBase64, string keyBase64, out string decryptedText)
+    {
+        decryptedText = string.Empty;
+        
         try
         {
             var encryptedBytes = Convert.FromBase64String(encryptedTextBase64);
             var keyBytes = Convert.FromBase64String(keyBase64);
-            return DecryptAes256Ecb(encryptedBytes, keyBytes);
+            
+            using var aes = Aes.Create();
+            aes.Key = keyBytes;
+            aes.Mode = CipherMode.ECB;
+            aes.Padding = PaddingMode.None;
+
+            using var decryptor = aes.CreateDecryptor();
+            var decryptedBytes = decryptor.TransformFinalBlock(encryptedBytes, 0, encryptedBytes.Length);
+            
+            decryptedText = Encoding.UTF8.GetString(decryptedBytes).TrimEnd('\0');
+            return true;
         }
-        catch (Exception)
+        catch
         {
-            return null;
+            return false;
         }
     }
 
-    private static string DecodeBase64ToString(string base64String)
+    private static bool TryDecodeBase64ToString(string base64String, out string result)
     {
-        var bytes = Convert.FromBase64String(base64String);
-        return Encoding.UTF8.GetString(bytes);
-    }
-
-    private static string DecryptAes256Ecb(byte[] encryptedBytes, byte[] keyBytes)
-    {
-        using var aes = Aes.Create();
-        aes.Key = keyBytes;
-        aes.Mode = CipherMode.ECB;
-        aes.Padding = PaddingMode.None;
-
-        using var decryptor = aes.CreateDecryptor();
-        var decryptedBytes = decryptor.TransformFinalBlock(encryptedBytes, 0, encryptedBytes.Length);
-
-        return Encoding.UTF8.GetString(decryptedBytes).TrimEnd('\0');
+        result = string.Empty;
+        
+        try
+        {
+            var bytes = Convert.FromBase64String(base64String);
+            result = Encoding.UTF8.GetString(bytes);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task SaveElementsToDatabase(
-        List<(string AttributeValue, string Html)> elements,
+        List<HtmlElement> elements,
         CancellationToken cancellationToken)
     {
+        if (elements.Count == 0) return;
+
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        string sql = @"
+        const string sql = @"
             INSERT INTO elements (attribute_value, html_code) 
             VALUES (@AttributeValue, @HtmlCode)";
 
-        foreach (var (attributeValue, html) in elements)
+        var parameters = elements.Select(e => new
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                sql,
-                new { AttributeValue = attributeValue, HtmlCode = html },
-                cancellationToken: cancellationToken));
-        }
-    }
+            AttributeValue = e.AttributeValue,
+            HtmlCode = e.Html
+        });
 
-    private static ApiResponse CreateErrorResponse(string errorCode, string errorMessage)
-    {
-        return new ApiResponse
-        {
-            Is_error = 1,
-            Error_code = errorCode,
-            Error_message = errorMessage
-        };
+        await connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            parameters,
+            cancellationToken: cancellationToken));
     }
 }
+
+public record HtmlElement(string AttributeValue, string Html);
